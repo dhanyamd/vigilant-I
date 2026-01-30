@@ -42,7 +42,7 @@ const MODEL_OR_PRIMARY = "deepseek/deepseek-v3.2-exp";
 // API KEY LOGIC
 const ENV_GEMINI_KEY = getEnvVar("GEMINI_API_KEY");
 const ENV_OR_KEY = getEnvVar("VIGILANT_API_KEY");
-const FALLBACK_GOOGLE = "AIzaSyB24lzyUBe3iZKTkdfymuBO9_BIkcBqhQk"; 
+const FALLBACK_GOOGLE = process.env.GEMINI_API_KEY; 
 
 let API_KEY = "";
 let IS_GOOGLE_KEY = false;
