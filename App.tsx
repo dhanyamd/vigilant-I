@@ -151,7 +151,7 @@ function App() {
                 <textarea 
                   value={customPrompt}
                   onChange={(e) => setCustomPrompt(e.target.value)}
-                  placeholder="// Ask specific questions (e.g., 'Is this seal cracked?') or inject parameters..."
+                  placeholder=" Ask specific questions (e.g., 'Is this seal cracked?') or inject parameters..."
                   className="w-full bg-black border border-gray-700 p-4 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-white transition-colors resize-none h-20 font-mono"
                 />
             </div>
