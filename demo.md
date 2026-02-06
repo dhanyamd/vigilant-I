@@ -30,6 +30,10 @@ Use these prompts in the Digital Twin terminal to test different behaviors.
 
 I highly urge you to use **your own prompts** related to science, space, and physics for best results.
 
+start with simple prompts like 
+1) how would torroid seal react on the surface of uranus?
+2) impact of bellows joints on martian surface while a dust storm?
+3) how would the material react on 600kC or -90C or 10kPa etc
 
 ### Quick Tests
 
