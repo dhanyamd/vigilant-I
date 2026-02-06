@@ -188,7 +188,7 @@ const ResultsView: React.FC<ResultsViewProps> = ({ result, onLaunchSim }) => {
             {physics.equationLogic && (
               <div className="mt-4 p-4 bg-black border border-lunar-success/30 font-mono text-[10px] text-lunar-success overflow-x-auto shadow-inner">
                 <div className="uppercase tracking-widest text-xs border-b border-lunar-success/30 pb-2 mb-2 flex justify-between items-center">
-                   <span className="font-bold">>> PHYSICS_KERNEL_TRACE.log</span>
+                   <span className="font-bold">{">>"} PHYSICS_KERNEL_TRACE.log</span>
                    <span className="flex items-center gap-1 animate-pulse"><span className="w-1.5 h-1.5 bg-lunar-success rounded-full"></span>LIVE</span>
                 </div>
                 <pre className="whitespace-pre-wrap leading-tight opacity-90">

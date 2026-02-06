@@ -1,5 +1,5 @@
 {
-  "name": "copy-of-vigilant-l",
+  "name": "vigilant-l",
   "private": true,
   "version": "0.0.0",
   "type": "module",
@@ -14,7 +14,8 @@
     "@google/genai": "^1.38.0",
     "three": "0.166.1",
     "@react-three/fiber": "8.16.8",
-    "@react-three/drei": "9.108.3"
+    "@react-three/drei": "9.108.3",
+    "leva": "0.9.35"
   },
   "devDependencies": {
     "@types/node": "^22.14.0",

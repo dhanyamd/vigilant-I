@@ -1,5 +1,5 @@
 {
-  "name": "Copy of Vigilant-L",
+  "name": "Vigilant-L",
   "description": "An autonomous AI forensic engineer for Lunar Artemis missions. Uses Multimodal DeepSeek V3.2 and Physics-Informed reasoning (Archard Wear Law) to detect regolith damage in real-time.",
   "requestFramePermissions": []
 }

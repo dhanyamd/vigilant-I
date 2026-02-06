@@ -1,4 +1,5 @@
 
+
 export interface GeminiPerception {
   visualSeverity: number; // 0.0 to 1.0 (0 = pristine, 1 = destroyed)
   audioChaos: number; // 0.0 to 1.0 (0 = harmonic, 1 = chaotic)
@@ -64,6 +65,7 @@ export interface UploadedFile {
   file: File;
   previewUrl: string;
   base64: string;
+  mimeType: string; // NEW: To distinguish Image vs Audio
   audioUrl?: string; // NEW: Supports actual audio playback
 }
 
@@ -81,11 +83,13 @@ export type GeometryType =
   | 'HELICAL_ACTUATOR' 
   | 'BELLOWS_JOINT' 
   | 'LATCH_MECHANISM' 
-  | 'PLANETARY_SURFACE'; // NEW: For ground/terrain simulation
+  | 'PLANETARY_SURFACE' // NEW: For ground/terrain simulation
+  | 'CUSTOM'; // NEW: For arbitrary user requests
 
 export type VisualizationStyle = 'THERMAL_HEATMAP' | 'HIGH_CONTRAST_BLUE' | 'WIREFRAME_DEBUG' | 'STRESS_FIELD';
 
 export interface SimulationState {
+  // CORE STATE
   flashTemperatureC: number;
   wearVolume: number;
   audioChaos: number;
@@ -96,15 +100,37 @@ export interface SimulationState {
   activeGeometry: GeometryType; // Switchable 3D models
   visualizationStyle: VisualizationStyle; // Decouples "Looks" from "Physics"
   
-  // NEW: Robust interaction controls
-  customColor?: string; // Explicit color override from chat
-  particleDensity?: number; // 0.0 to 1.0 (Airborne Dust)
+  // INTERACTIVE PHYSICS & ANIMATION HOOKS
+  customColor?: string; // Explicit color override
+  particleDensity?: number; // 0.0 to 1.0 (Airborne Dust/Suspension)
+  dustAccumulation?: number; // 0.0 to 1.0 (Surface Adhesion/Clumping)
+  corrosionSeverity?: number; // 0.0 to 1.0 (Chemical Surface Decay)
+  structuralIntegrity?: number; // 1.0 (Solid) to 0.0 (Collapsed)
+  sparksIntensity?: number; // 0.0 to 1.0 (Friction Sparks)
+
+  // ROBUST PHYSICS CONTROLS
+  materialStiffness?: number; // 0.0 (Liquid/Elastic) to 1.0 (Brittle/Cryo)
+  occlusionFactor?: number; // 0.0 (Visible) to 1.0 (Hidden -> Triggers Ghost Layer)
+  yieldPoint?: number; // Threshold where bending becomes breaking
+  thermalConductivity?: number; // 0-1, drives heat spread speed
+  frictionCoefficient?: number; // 0-2, drives audioChaos animation
+  cycleCount?: number; // Tracks fatigue history
+
+  // AI RENDERING ENGINE OVERRIDES (Anti-Blob Logic)
+  vertexNoise?: number;      // 0.0 (Smooth) to 2.0 (Jagged/Spiked)
+  buckleFactor?: number;     // 0.0 (Straight) to 1.0 (Bent/Warped)
+  fractureState?: number;    // 0.0 (Solid) to 1.0 (Broken/Separated)
   
-  // INTELLIGENT PHYSICS LAYERS
-  dustAccumulation?: number; // 0.0 to 1.0 (Surface Adhesion due to Electrostatics)
-  corrosionSeverity?: number; // 0.0 to 1.0 (Surface Pitting/Oxidation)
-  structuralIntegrity?: number; // 1.0 (Perfect) to 0.0 (Collapsed/Broken)
-  sparksIntensity?: number; // 0.0 to 1.0 (Friction sparks)
+  // GEOMETRY DERIVATION (New)
+  radialWarp?: number;       // 0.0 to 1.0 (Side-to-side bending)
+  axialCompression?: number; // 0.5 (Squashed) to 1.5 (Stretched)
+  displacementScale?: number;// Multiplier for noise/fracture distance
+  
+  // MATERIAL PROPERTIES
+  metalnessOverride?: number;
+  roughnessOverride?: number;
+  emissiveOverride?: string;
+  emissiveIntensityOverride?: number;
 }
 
 export interface ChatMessage {

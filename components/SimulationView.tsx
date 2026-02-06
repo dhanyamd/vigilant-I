@@ -24,106 +24,124 @@ const useSmartMaterial = (simState: SimulationState) => {
     const severity = simState.visualSeverity || 0;
     const mat = simState.detectedMaterial;
     const customColor = simState.customColor;
+    const occlusion = simState.occlusionFactor || 0;
     
     // Intelligent Physics Layers
     const dustLevel = simState.dustAccumulation || 0;
     const corrosion = simState.corrosionSeverity || 0;
+
+    // AI Overrides (Visual-Physics Bridge)
+    const metalOverride = simState.metalnessOverride;
+    const roughOverride = simState.roughnessOverride;
+    const emissiveOverride = simState.emissiveOverride;
+    const emissiveIntOverride = simState.emissiveIntensityOverride;
 
     // Base Material Props (Dynamic based on detected material)
     const props: any = {
       color: new THREE.Color(),
       emissive: new THREE.Color(),
       emissiveIntensity: 0,
-      metalness: 0.8,
-      roughness: 0.2,
-      wireframe: false
+      metalness: metalOverride !== undefined && metalOverride !== null ? metalOverride : 0.8,
+      roughness: roughOverride !== undefined && roughOverride !== null ? roughOverride : 0.4,
+      wireframe: false,
+      transparent: false,
+      opacity: 1.0
     };
     
-    // 1. MATERIAL BASE DEFAULTS
+    // 1. MATERIAL BASE DEFAULTS (Fallback if no AI override)
     if (mat === 'RUBBER_VITON') {
         props.color.setHex(0x1a1a1a); 
-        props.metalness = 0.1; props.roughness = 0.9;
+        if (!metalOverride) props.metalness = 0.1; 
+        if (!roughOverride) props.roughness = 0.9;
     } else if (mat === 'COPPER_BRONZE') {
         props.color.setHex(0xc1794b); 
-        props.metalness = 0.9; props.roughness = 0.3;
+        if (!metalOverride) props.metalness = 0.9; 
+        if (!roughOverride) props.roughness = 0.3;
     } else if (mat === 'COMPOSITE_CARBON') {
         props.color.setHex(0x111111); 
-        props.metalness = 0.3; props.roughness = 0.7;
+        if (!metalOverride) props.metalness = 0.3; 
+        if (!roughOverride) props.roughness = 0.7;
     } else if (mat === 'CERAMIC_SI3N4') {
         props.color.setHex(0xf5f5f5); 
-        props.metalness = 0.1; props.roughness = 0.1;
+        if (!metalOverride) props.metalness = 0.1; 
+        if (!roughOverride) props.roughness = 0.1;
     } else if (mat === 'TITANIUM_ALLOY') {
-        props.color.setHex(0x6e6e6e); 
-        props.metalness = 0.6; props.roughness = 0.4;
+        props.color.setHex(0xBFC1C2); 
+        if (!metalOverride) props.metalness = 0.7; 
+        if (!roughOverride) props.roughness = 0.4;
     } else if (mat === 'PLANETARY_ROCK') {
         props.color.setHex(0x595959); 
-        props.metalness = 0.0; props.roughness = 1.0;
+        if (!metalOverride) props.metalness = 0.0; 
+        if (!roughOverride) props.roughness = 1.0;
+    } else {
+        props.color.setHex(0xA9A9A9);
     }
 
-    // 2. INTELLIGENT CONTRAST (Visibility Check)
-    // Rule: Component must always be visible.
+    // 2. INTELLIGENT CONTRAST & GHOST LAYER
     if (customColor) {
         props.color.set(customColor);
     }
-    
-    // Check luminance. If too dark (< 0.15) and not glowing from heat, add ambient emissivity.
-    const hsl = { h: 0, s: 0, l: 0 };
-    props.color.getHSL(hsl);
-    if (hsl.l < 0.15 && tempC < 200) {
-        // "Night Vision" logic: Boost emissive in the same hue
+
+    // GHOST LAYER TRIGGER
+    if (occlusion > 0.8) {
+        if (!customColor) props.color.setHex(0xFF69B4); 
+        props.transparent = true;
+        props.opacity = 0.4;
         props.emissive.copy(props.color);
-        props.emissiveIntensity = 0.3; 
+        props.emissiveIntensity = 0.5;
+        props.wireframe = true; 
+    } 
+    else {
+        // Normal Visibility Logic
+        const hsl = { h: 0, s: 0, l: 0 };
+        props.color.getHSL(hsl);
+        if (hsl.l < 0.15 && tempC < 200) {
+            props.emissive.copy(props.color);
+            props.emissiveIntensity = 0.3; 
+        }
     }
 
     // 3. PHYSICAL WEATHERING LAYERS (Dust & Corrosion)
-    if (dustLevel > 0) {
-        // Dust makes things lighter (grey) and rougher
+    if (dustLevel > 0 && occlusion <= 0.8) {
         const dustColor = new THREE.Color(0x888888);
-        props.color.lerp(dustColor, dustLevel * 0.7); // Blend base color with dust
-        props.roughness = Math.min(1.0, props.roughness + dustLevel * 0.8);
-        props.metalness = Math.max(0.0, props.metalness - dustLevel * 0.8); // Dust isn't shiny
+        props.color.lerp(dustColor, dustLevel * 0.7); 
+        if (!roughOverride) props.roughness = Math.min(1.0, props.roughness + dustLevel * 0.8);
+        if (!metalOverride) props.metalness = Math.max(0.0, props.metalness - dustLevel * 0.8); 
     }
 
-    if (corrosion > 0) {
-        // Rust makes things orange/brown and rough
-        const rustColor = new THREE.Color(0x8B4513); // SaddleBrown
+    if (corrosion > 0 && occlusion <= 0.8) {
+        const rustColor = new THREE.Color(0x8B4513); 
+        if (mat === 'COPPER_BRONZE') rustColor.setHex(0x2E8B57); 
         props.color.lerp(rustColor, corrosion * 0.8);
-        props.roughness = Math.min(1.0, props.roughness + corrosion * 0.5);
+        if (!roughOverride) props.roughness = Math.min(1.0, props.roughness + corrosion * 0.5);
     }
 
-    // 4. VISUALIZATION STYLES (No Overlay Masking)
+    // 4. VISUALIZATION STYLES & OVERRIDES
+    if (emissiveOverride) {
+        props.emissive.set(emissiveOverride);
+        props.emissiveIntensity = emissiveIntOverride ?? 1.0;
+    }
+
     if (style === 'WIREFRAME_DEBUG') {
       props.color.setHex(0x00FF00);
       props.wireframe = true;
       props.emissive.setHex(0x003300);
       props.emissiveIntensity = 0.5;
     }
-    else if (style === 'HIGH_CONTRAST_BLUE' && !customColor) {
-      props.color.setHSL(0.6, 1.0, 0.5); // Blue Base
+    else if (style === 'HIGH_CONTRAST_BLUE' && !customColor && occlusion <= 0.8) {
+      props.color.setHSL(0.6, 1.0, 0.5); 
       const brightness = Math.min(tempC / 500, 1.0);
       props.emissive.setHSL(0.6, 0.5, brightness);
       props.emissiveIntensity = 0.5 + brightness;
     }
-    else if (style === 'THERMAL_HEATMAP') {
-       // Physics-based Blackbody radiation simulation
+    else if (style === 'THERMAL_HEATMAP' && occlusion <= 0.8) {
        const t = Math.min(Math.max(tempC, 0) / 1200, 1);
-       
        if (tempC > 200) {
-          // Heat Override: Materials glow red/orange/white
           const heatColor = new THREE.Color();
-          heatColor.setHSL(0.05 + (1-t)*0.1, 1.0, 0.5 * t); // Red -> Yellow -> White
+          heatColor.setHSL(0.05 + (1-t)*0.1, 1.0, 0.5 * t); 
           props.emissive.copy(heatColor);
           props.emissiveIntensity = (tempC - 200) / 400;
-       } else if (!customColor) {
-           // Cool state
-           // Maintain material base color (already set above)
        }
-    }
-    else if (style === 'STRESS_FIELD') {
-        const chaos = simState.audioChaos || 0;
-        props.color.setHSL(0.0 + (1.0 - chaos) * 0.3, 1.0, 0.5);
-        props.emissive.setHSL(0.0, 1.0, chaos * 0.5);
-        props.emissiveIntensity = chaos;
     }
 
     return props;
@@ -173,11 +191,21 @@ const DeformableMesh = ({
     const wear = simState.wearVolume || 0; 
     const corrosion = simState.corrosionSeverity || 0;
     const dust = simState.dustAccumulation || 0;
+    const stiffness = simState.materialStiffness || 0; // 0=Elastic, 1=Brittle
     
+    // AI GEOMETRY OVERRIDES (The Anti-Blob Logic)
+    const aiNoise = simState.vertexNoise || 0; 
+    const aiBuckle = simState.buckleFactor || 0; 
+    const aiFracture = simState.fractureState || 0; 
+    const radialWarp = simState.radialWarp || 0;
+    const axialCompression = simState.axialCompression || 1.0;
+    const dispScale = simState.displacementScale || 1.0;
+
     const isSurface = simState.activeGeometry === 'PLANETARY_SURFACE';
     const isBellows = simState.activeGeometry === 'BELLOWS_JOINT';
 
-    const wearFactor = Math.min(wear * 5e8, 2.0); 
+    // Work Hardening / Acid Withering
+    const scaleWither = 1.0 - (corrosion * 0.1);
 
     for (let i = 0; i < count; i++) {
         const ox = originalPositions[i * 3];
@@ -191,78 +219,120 @@ const DeformableMesh = ({
         let nz = oz / len;
         if (isSurface) { nx = 0; ny = 1; nz = 0; }
 
-        // A. VIBRATION (High Frequency Jitter)
+        // A. AXIAL COMPRESSION (Squashing)
+        // Happens BEFORE noise/vibration
+        let ty = oy * axialCompression;
+        let tx = ox;
+        let tz = oz;
+
+        // B. RADIAL WARP (Bending)
+        if (radialWarp > 0) {
+            tx += Math.sin(ty * 0.3) * radialWarp * 3.0;
+            tz += Math.cos(ty * 0.3) * radialWarp * 3.0;
+        }
+
+        // C. VIBRATION (High Frequency Jitter)
         let vibX = 0, vibY = 0, vibZ = 0;
         if (vibration > 0.1) {
-            const freq = 30 + (vibration * 60);
-            const mag = vibration * 0.15 * integrity; // Breaks don't vibrate uniformly
+            const freq = 30 + (vibration * 60) + (stiffness * 50); 
+            const mag = vibration * 0.15 * integrity * (1.0 - stiffness * 0.5); 
+            
             vibX = Math.sin(time * freq + i) * mag;
             vibY = Math.cos(time * freq + i) * mag;
             vibZ = Math.sin(time * freq + i * 0.5) * mag;
         }
 
-        // B. WEAR (Shrinkage)
-        const wearX = -nx * wearFactor;
-        const wearY = -ny * wearFactor;
-        const wearZ = -nz * wearFactor;
-
-        // C. CORROSION & DUST (Surface Noise)
-        let surfX = 0, surfY = 0, surfZ = 0;
-        const noiseVal = simpleNoise(ox * 5, oy * 5, oz * 5);
+        // D. AI-DRIVEN MUTATIONS (Anti-Blob Logic)
+        let mutX = 0, mutY = 0, mutZ = 0;
         
-        if (corrosion > 0) {
-            // Pitting: Inward spikes
-            const pit = (noiseVal - 0.7); 
-            if (pit > 0) {
-                 const depth = pit * corrosion * 1.5;
-                 surfX -= nx * depth;
-                 surfY -= ny * depth;
-                 surfZ -= nz * depth;
-            }
-        }
-        
-        if (dust > 0) {
-            // Accretion: Outward lumps
-            const lump = (noiseVal - 0.4);
-            if (lump > 0) {
-                const height = lump * dust * 0.5;
-                 surfX += nx * height;
-                 surfY += ny * height;
-                 surfZ += nz * height;
-            }
+        // 1. VERTEX NOISE (Jaggedness) - Scaled by displacementScale
+        if (aiNoise > 0) {
+            const jag = simpleNoise(tx*2, ty*2, tz*2) - 0.5;
+            mutX += nx * jag * aiNoise * dispScale * 2.0;
+            mutY += ny * jag * aiNoise * dispScale * 2.0;
+            mutZ += nz * jag * aiNoise * dispScale * 2.0;
         }
 
-        // D. CATASTROPHIC FAILURE (Structural Collapse)
-        let failX = 0, failY = 0, failZ = 0;
-        if (integrity < 0.9 && !isSurface) {
-            const collapseFactor = (1.0 - integrity);
-            // Warping
-            failX = Math.sin(oy * 0.5) * collapseFactor * 2.0;
-            
-            // Crushing (Y-axis compression)
-            failY = -oy * collapseFactor * 0.5; 
-            
-            // Explosion/Expansion
-            failZ = Math.cos(ox * 0.5) * collapseFactor * 2.0;
+        // 2. BUCKLE (Warping/Melting)
+        if (aiBuckle > 0) {
+            mutX += Math.sin(ty * 0.3) * aiBuckle * 3.0;
+            mutZ += Math.cos(ty * 0.3) * aiBuckle * 3.0;
+            // Sagging effect (Y-drop)
+            mutY -= Math.abs(Math.sin(tx * 0.5)) * aiBuckle * 1.0;
+        }
+
+        // 3. FRACTURE (Separation)
+        if (aiFracture > 0.5) {
+             const splitLine = simpleNoise(i, i, i);
+             if (splitLine > 0.8) {
+                 mutX += nx * aiFracture * dispScale * 4.0;
+                 mutY += ny * aiFracture * dispScale * 4.0;
+                 mutZ += nz * aiFracture * dispScale * 4.0;
+             }
+        }
+
+        // Apply fallback collapse if AI didn't specify, but integrity is low
+        if (integrity < 0.9 && aiNoise === 0 && aiBuckle === 0 && !isSurface) {
+             const collapseFactor = (1.0 - integrity);
+             if (stiffness > 0.8) {
+                const shard = simpleNoise(i, i, i);
+                if (shard > 0.8) {
+                    mutX += nx * collapseFactor * 3.0;
+                    mutY += ny * collapseFactor * 3.0;
+                    mutZ += nz * collapseFactor * 3.0;
+                }
+            } else {
+                mutX += Math.sin(ty * 0.5) * collapseFactor * 2.0;
+                mutY -= ty * collapseFactor * 0.5; 
+                mutZ += Math.cos(tx * 0.5) * collapseFactor * 2.0;
+            }
         }
 
         // SPECIAL GEOMETRY LOGIC
         let geoX = 0, geoZ = 0;
         if (isBellows) {
-            const ridges = Math.sin(oy * 5.0); 
+            const ridges = Math.sin(ty * 5.0); 
             const radialPush = ridges * 0.5; 
             if (Math.sqrt(nx*nx + nz*nz) > 0) {
                geoX += (nx / Math.sqrt(nx*nx + nz*nz)) * radialPush;
                geoZ += (nz / Math.sqrt(nx*nx + nz*nz)) * radialPush;
             }
         }
+        
+        // E. WEAR & WITHERING (Applied to final transformed pos)
+        const witherX = tx * (scaleWither - 1.0);
+        const witherY = ty * (scaleWither - 1.0);
+        const witherZ = tz * (scaleWither - 1.0);
 
-        // Apply
+        const wearFactor = Math.min(wear * 5e8, 2.0); 
+        const wearX = -nx * wearFactor;
+        const wearY = -ny * wearFactor;
+        const wearZ = -nz * wearFactor;
+
+        // F. CORROSION & DUST (Surface Noise)
+        let surfX = 0, surfY = 0, surfZ = 0;
+        const noiseVal = simpleNoise(tx * 5, ty * 5, tz * 5);
+        if (corrosion > 0) {
+            const pit = (noiseVal - 0.7); 
+            if (pit > 0) {
+                 const depth = pit * corrosion * 1.5;
+                 surfX -= nx * depth; surfY -= ny * depth; surfZ -= nz * depth;
+            }
+        }
+        if (dust > 0) {
+            const lump = (noiseVal - 0.4);
+            if (lump > 0) {
+                const height = lump * dust * 0.5;
+                 surfX += nx * height; surfY += ny * height; surfZ += nz * height;
+            }
+        }
+
+        // Apply Final
         positions.setXYZ(
             i,
-            ox + vibX + wearX + surfX + failX + geoX,
-            oy + vibY + wearY + surfY + failY,
-            oz + vibZ + wearZ + surfZ + failZ + geoZ
+            tx + vibX + wearX + surfX + mutX + geoX + witherX,
+            ty + vibY + wearY + surfY + mutY + geoZ + witherY,
+            tz + vibZ + wearZ + surfZ + mutZ + geoZ + witherZ
         );
     }
 
@@ -279,7 +349,7 @@ const DeformableMesh = ({
 
 // --- PARTICLE SYSTEMS ---
 
-const DustStorm = ({ density = 0.2 }: { density?: number }) => {
+const DustStorm = ({ density = 0.2, color }: { density?: number, color?: string }) => {
     // Clamp density
     const d = Math.max(0, Math.min(1.0, density));
     if (d === 0) return null;
@@ -294,32 +364,28 @@ const DustStorm = ({ density = 0.2 }: { density?: number }) => {
           size={2 + d * 3}
           speed={speed}
           opacity={0.4 + d * 0.4}
-          color="#A3A3A3" // Lunar Grey
+          color={color || "#A3A3A3"} 
         />
     );
 };
 
-// NEW: FRICTION SPARKS (Physics Interaction)
 const FrictionSparks = ({ intensity }: { intensity?: number }) => {
     if (!intensity || intensity < 0.1) return null;
-    
-    // Intensity defines amount and wildness
     const count = Math.floor(intensity * 100);
-    
     return (
        <Sparkles
          count={count}
-         scale={12} // Localized to the part
+         scale={12}
          size={6 + intensity * 4}
          speed={2 + intensity * 2}
          opacity={1.0}
-         color="#FFCC00" // Gold/Orange sparks
-         noise={1} // Chaotic movement
+         color="#FFCC00" 
+         noise={1} 
        />
     );
 }
 
-// --- DYNAMIC LIGHTING (Chaos Flicker) ---
+// --- DYNAMIC LIGHTING ---
 const DynamicLighting = ({ chaos }: { chaos: number }) => {
     const lightRef = useRef<THREE.PointLight>(null);
     useFrame((state) => {
@@ -334,7 +400,6 @@ const DynamicLighting = ({ chaos }: { chaos: number }) => {
     return (
         <group>
             <pointLight ref={lightRef} position={[10, 10, 10]} intensity={1.0} />
-            {/* Intelligent Contrast Backlight: Ensures silhouette is visible */}
             <spotLight position={[-15, 5, -10]} intensity={2.0} color="#333333" />
         </group>
     );
@@ -391,7 +456,10 @@ const SimulationView: React.FC<SimulationViewProps> = ({ result, onBack }) => {
         gravity: 0.16,
         activeGeometry: geo,
         visualizationStyle: style,
-        customColor: undefined 
+        customColor: '#F5DEB3', // Default to visible Wheat/Tan per user request (was bronze #CD7F32)
+        materialStiffness: 0.2, 
+        occlusionFactor: 0,
+        yieldPoint: 0.8
       };
   };
 
@@ -442,6 +510,9 @@ const SimulationView: React.FC<SimulationViewProps> = ({ result, onBack }) => {
               if (response.updatedState.customColor === null) delete newState.customColor;
 
               // STATE CHANGE LOGS
+              if (response.updatedState.activeGeometry && response.updatedState.activeGeometry === 'CUSTOM') {
+                   setMessages(curr => [...curr, { role: 'ai', text: `[SYS] ADAPTIVE MESH: Rendering custom non-standard geometry.`, timestamp: new Date(), isSystemEvent: true }]);
+              }
               if (response.updatedState.structuralIntegrity !== undefined && response.updatedState.structuralIntegrity < 0.5) {
                    setMessages(curr => [...curr, { role: 'ai', text: `[ALERT] STRUCTURAL YIELD DETECTED. Integrity: ${(response.updatedState!.structuralIntegrity! * 100).toFixed(0)}%`, timestamp: new Date(), isSystemEvent: true }]);
               }
@@ -450,6 +521,15 @@ const SimulationView: React.FC<SimulationViewProps> = ({ result, onBack }) => {
               }
               if (response.updatedState.customColor) {
                   setMessages(curr => [...curr, { role: 'ai', text: `[SYS] Material Albedo Override: ${response.updatedState?.customColor}`, timestamp: new Date(), isSystemEvent: true }]);
+              }
+              if (response.updatedState.occlusionFactor && response.updatedState.occlusionFactor > 0.8) {
+                   setMessages(curr => [...curr, { role: 'ai', text: `[SYS] VISIBILITY LOSS. ENGAGING GHOST-LAYER BYPASS.`, timestamp: new Date(), isSystemEvent: true }]);
+              }
+              if (response.updatedState.vertexNoise && response.updatedState.vertexNoise > 0.5) {
+                   setMessages(curr => [...curr, { role: 'ai', text: `[SYS] GEOMETRY MUTATION: Poly-Deformation Active.`, timestamp: new Date(), isSystemEvent: true }]);
+              }
+              if (response.updatedState.radialWarp && response.updatedState.radialWarp > 0.3) {
+                  setMessages(curr => [...curr, { role: 'ai', text: `[SYS] GEOMETRY MUTATION: Radial Buckling Initiated.`, timestamp: new Date(), isSystemEvent: true }]);
               }
 
               return newState;
@@ -468,51 +548,66 @@ const SimulationView: React.FC<SimulationViewProps> = ({ result, onBack }) => {
   const cylGeo = useMemo(() => new THREE.CylinderGeometry(4, 4, 12, 32, 16), []);
   const bellowsGeo = useMemo(() => new THREE.CylinderGeometry(6, 6, 18, 32, 64), []);
   const planeGeo = useMemo(() => new THREE.PlaneGeometry(50, 50, 64, 64), []);
+  
+  // Custom Adaptive Geometry (High-Resolution Sphere for 'Text-to-3D' simulation)
+  const sphereGeo = useMemo(() => new THREE.SphereGeometry(8, 128, 128), []);
 
   return (
     <div className="w-full h-full min-h-[700px] flex flex-col bg-black border-2 border-space-700 animate-fade-in-up">
+      
       {/* 3D VIEWPORT */}
-      <div className="relative flex-grow bg-space-900 overflow-hidden min-h-[400px]">
-         {/* HUD */}
-         <div className="absolute top-4 left-4 z-10 pointer-events-none">
-             <div className="bg-black/50 backdrop-blur border border-white/20 p-4">
-                 <h2 className="text-xl font-bold tracking-widest text-lunar-success">VIGILANT KERNEL v3.0</h2>
-                 <div className="mt-2 text-xs space-y-1 text-gray-300 font-mono">
-                     <p>GEO: {simState.activeGeometry}</p>
-                     <p>INTEGRITY: {((simState.structuralIntegrity ?? 1) * 100).toFixed(0)}%</p>
-                     <p>DUST ADHESION: {((simState.dustAccumulation || 0) * 100).toFixed(0)}%</p>
-                     <p>CORROSION: {((simState.corrosionSeverity || 0) * 100).toFixed(0)}%</p>
+      <div className="relative flex-grow bg-space-900 overflow-hidden min-h-[400px] flex">
+         
+         {/* CENTER: CANVAS */}
+         <div className="flex-grow relative">
+             {/* HUD */}
+             <div className="absolute top-4 left-4 z-10 pointer-events-none">
+                 <div className="bg-black/50 backdrop-blur border border-white/20 p-4">
+                     <h2 className="text-xl font-bold tracking-widest text-lunar-success">VIGILANT KERNEL v3.2</h2>
+                     <div className="mt-2 text-xs space-y-1 text-gray-300 font-mono">
+                         <p>GEO: {simState.activeGeometry}</p>
+                         <p>INTEGRITY: {((simState.structuralIntegrity ?? 1) * 100).toFixed(0)}%</p>
+                         <p>STIFFNESS: {((simState.materialStiffness ?? 0) * 100).toFixed(0)}%</p>
+                         <p className={simState.occlusionFactor && simState.occlusionFactor > 0.8 ? "text-lunar-danger animate-pulse" : ""}>
+                             VISIBILITY: {(100 - (simState.occlusionFactor ?? 0)*100).toFixed(0)}%
+                         </p>
+                     </div>
                  </div>
              </div>
+
+             <Canvas camera={{ position: [15, 15, 15], fov: 45 }}>
+                <color attach="background" args={['#050505']} />
+                <Stars radius={100} depth={50} count={5000} factor={4} saturation={0} fade speed={1} />
+                
+                {/* DUST SYSTEM: Color reacts to prompts (Mars=Red, Moon=Grey) via AI customColor reasoning implicitly or explicitly */}
+                <DustStorm density={simState.particleDensity || (simState.isRegolith ? 0.3 : 0)} color={simState.customColor} />
+                <FrictionSparks intensity={simState.sparksIntensity} />
+                
+                <ambientLight intensity={0.5} />
+                <DynamicLighting chaos={simState.audioChaos || 0} />
+                
+                <spotLight position={[-10, 20, 0]} angle={0.3} intensity={2} castShadow />
+                <OrbitControls autoRotate autoRotateSpeed={0.5} />
+                
+                <group position={[0, 0, 0]}>
+                    {simState.activeGeometry === 'TOROIDAL_SEAL' && <DeformableMesh baseGeometry={torusGeo} simState={simState} rotationSpeed={0.01} />}
+                    {simState.activeGeometry === 'HELICAL_ACTUATOR' && <DeformableMesh baseGeometry={cylGeo} simState={simState} rotationSpeed={0.05} />}
+                    {simState.activeGeometry === 'BELLOWS_JOINT' && <DeformableMesh baseGeometry={bellowsGeo} simState={simState} />}
+                    {simState.activeGeometry === 'LATCH_MECHANISM' && <DeformableMesh baseGeometry={boxGeo} simState={simState} />}
+                    {simState.activeGeometry === 'PLANETARY_SURFACE' && (
+                        <group rotation={[-Math.PI/2, 0, 0]}>
+                            <DeformableMesh baseGeometry={planeGeo} simState={simState} />
+                        </group>
+                    )}
+                    {/* CUSTOM / TEXT-TO-3D FALLBACK */}
+                    {simState.activeGeometry === 'CUSTOM' && (
+                        <DeformableMesh baseGeometry={sphereGeo} simState={simState} rotationSpeed={0.05} />
+                    )}
+                </group>
+
+                <gridHelper args={[50, 50, 0x333333, 0x111111]} position={[0, -5, 0]} />
+             </Canvas>
          </div>
-
-         <Canvas camera={{ position: [15, 15, 15], fov: 45 }}>
-            <color attach="background" args={['#050505']} />
-            <Stars radius={100} depth={50} count={5000} factor={4} saturation={0} fade speed={1} />
-            
-            <DustStorm density={simState.particleDensity || (simState.isRegolith ? 0.3 : 0)} />
-            <FrictionSparks intensity={simState.sparksIntensity || (simState.audioChaos > 0.5 ? simState.audioChaos : 0)} />
-            
-            <ambientLight intensity={0.2} />
-            <DynamicLighting chaos={simState.audioChaos || 0} />
-            
-            <spotLight position={[-10, 20, 0]} angle={0.3} intensity={2} castShadow />
-            <OrbitControls autoRotate autoRotateSpeed={0.5} />
-            
-            <group position={[0, 0, 0]}>
-                {simState.activeGeometry === 'TOROIDAL_SEAL' && <DeformableMesh baseGeometry={torusGeo} simState={simState} rotationSpeed={0.01} />}
-                {simState.activeGeometry === 'HELICAL_ACTUATOR' && <DeformableMesh baseGeometry={cylGeo} simState={simState} rotationSpeed={0.05} />}
-                {simState.activeGeometry === 'BELLOWS_JOINT' && <DeformableMesh baseGeometry={bellowsGeo} simState={simState} />}
-                {simState.activeGeometry === 'LATCH_MECHANISM' && <DeformableMesh baseGeometry={boxGeo} simState={simState} />}
-                {simState.activeGeometry === 'PLANETARY_SURFACE' && (
-                    <group rotation={[-Math.PI/2, 0, 0]}>
-                        <DeformableMesh baseGeometry={planeGeo} simState={simState} />
-                    </group>
-                )}
-            </group>
-
-            <gridHelper args={[50, 50, 0x333333, 0x111111]} position={[0, -5, 0]} />
-         </Canvas>
       </div>
 
       {/* TERMINAL */}
@@ -541,7 +636,7 @@ const SimulationView: React.FC<SimulationViewProps> = ({ result, onBack }) => {
                 value={input} onChange={(e) => setInput(e.target.value)} 
                 onKeyDown={(e) => { if(e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSendMessage(); }}}
                 className="w-full bg-transparent text-white focus:outline-none resize-none h-12 text-xs font-mono"
-                placeholder="Enter command (e.g., 'Make it hot', 'Change color to red', 'Show dust storm')"
+                placeholder="Enter command (e.g., 'Simulate Cryo-Freeze', 'Add Acid Rain', 'Simulate Leaf Stomata')"
              />
              <button onClick={handleSendMessage} disabled={isProcessing || !input.trim()} className="px-4 border border-gray-600 hover:bg-white hover:text-black uppercase text-xs font-mono">Send</button>
          </div>

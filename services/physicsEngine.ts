@@ -81,6 +81,15 @@ const SCALE_LOAD_MAP: Record<string, number> = {
     'HEAVY_MACHINERY': 20000 // 2 tons (Lander legs)
 };
 
+// BASIC DYNAMIC LOAD RATING (C) Estimates (Newtons)
+const BEARING_C_RATINGS: Record<string, number> = {
+    'MICRO': 1500,
+    'SMALL': 6000,
+    'MEDIUM': 45000,
+    'LARGE': 180000,
+    'HEAVY_MACHINERY': 800000
+};
+
 const CRITICAL_WEAR_VOLUME = 1e-8; // m^3 (Generic failure threshold for small components)
 
 export const computePhysicsModel = (perception: GeminiPerception): PhysicsComputation => {
@@ -144,7 +153,7 @@ export const computePhysicsModel = (perception: GeminiPerception): PhysicsComput
   const flashTemp = 20 + tempRise; // Ambient 20C + Rise
 
 
-  // --- 7. FATIGUE & RUL ---
+  // --- 7. FATIGUE & RUL (CALCULATED) ---
   // Vibration (Chaos) increases effective load
   const shockFactor = 1 + (perception.audioChaos * 3.0); 
   const effectiveLoad = NominalLoad * shockFactor;
@@ -153,16 +162,38 @@ export const computePhysicsModel = (perception: GeminiPerception): PhysicsComput
   const stressEstimate = effectiveLoad / 0.0001; // Approx 1cm^2 contact
   const safetyFactor = dbProps.Yield / stressEstimate;
 
-  // Remaining Volume
-  const remainingVol = Math.max(0, CRITICAL_WEAR_VOLUME - currentWearVolume);
+  // L10 Life Calculation
+  // L10 (hours) = (1,000,000 / (60 * RPM)) * (C / P)^p
+  // Estimate Radius for RPM conversion: v = r * w => w = v/r => RPM = (v/r) * (60/2pi)
+  let radius = 0.05; // 5cm default
+  if (scaleKey === 'MICRO') radius = 0.005;
+  else if (scaleKey === 'SMALL') radius = 0.02;
+  else if (scaleKey === 'MEDIUM') radius = 0.1;
+  else if (scaleKey === 'LARGE') radius = 0.3;
+  else if (scaleKey === 'HEAVY_MACHINERY') radius = 0.5;
+
+  const rpm = (velocity / radius) * 9.55; 
+  const safeRPM = Math.max(rpm, 1); // Avoid div by zero
+
+  const C = BEARING_C_RATINGS[scaleKey] || 5000;
+  const P = effectiveLoad;
+  const p_exp = 3.0; // Ball bearings (standard)
   
-  // RUL = Remaining / Rate
+  let l10Life = (1000000 / (60 * safeRPM)) * Math.pow((C / P), p_exp);
+  
+  // Clamp extreme values for UI
+  if (l10Life > 100000) l10Life = 100000;
+  if (safetyFactor < 1.0) l10Life = 0; // Immediate failure if yield exceeded
+
+  // RUL (Wear based) = Remaining / Rate
+  const remainingVol = Math.max(0, CRITICAL_WEAR_VOLUME - currentWearVolume);
   let rul = wearRatePerHour > 0 ? (remainingVol / wearRatePerHour) : 9999;
   
-  // Fracture/Yield Override: If stress > yield, component fails INSTANTLY, regardless of wear.
+  // Fracture/Yield Override: If stress > yield, component fails INSTANTLY.
   if (safetyFactor < 1.0) rul = 0;
   
-  // Cap for display
+  // RUL is min of Wear Life and Fatigue Life
+  rul = Math.min(rul, l10Life);
   if (rul > 10000) rul = 10000;
 
 
@@ -179,7 +210,7 @@ export const computePhysicsModel = (perception: GeminiPerception): PhysicsComput
    > Scale: ${scaleKey} -> Load: ${NominalLoad} N
    > Chaos (Input A): ${(perception.audioChaos * 100).toFixed(0)}% -> Shock Factor: ${shockFactor.toFixed(2)}x
    > DYNAMIC LOAD: ${effectiveLoad.toFixed(1)} N (Effective)
-   > Speed: ${velocity} m/s
+   > Speed: ${velocity} m/s (~${safeRPM.toFixed(0)} RPM)
    > Contaminant: ${perception.detectedContaminant} (k-factor: ${k.toExponential(1)})
 
 3. CALCULATION: ARCHARD WEAR LAW
@@ -187,12 +218,14 @@ export const computePhysicsModel = (perception: GeminiPerception): PhysicsComput
    > Input: (${k.toExponential(0)} * ${NominalLoad}N * ${(velocity*3600).toFixed(0)}m/h) / ${dbProps.H}
    > Wear Rate: ${(wearRatePerHour * 1e9).toFixed(3)} mm³/hr
 
-4. CALCULATION: THERMODYNAMICS
-   > Heat Flux (Q) = μFv = ${mu.toFixed(2)} * ${NominalLoad} * ${velocity} = ${heatFlux.toFixed(1)} W
-   > Delta T = Q / Cond * Geom = +${tempRise.toFixed(1)}°C
+4. CALCULATION: L10 FATIGUE LIFE
+   > Rating (C): ${C} N
+   > Load (P): ${effectiveLoad.toFixed(0)} N
+   > L10 = (1M / 60*n) * (C/P)^3
+   > Result: ${l10Life.toFixed(0)} Hours
 
 5. FINAL PROGNOSIS
-   > Current Damage: ${(perception.visualSeverity * 100).toFixed(1)}%
+   > Flash Temp: ${flashTemp.toFixed(1)}°C
    > RUL: ${rul.toFixed(2)} Hours
    > Safety Factor: ${safetyFactor.toFixed(2)} ${safetyFactor < 1 ? '[CRITICAL YIELD]' : '[OK]'}
 `.trim();
@@ -211,7 +244,7 @@ export const computePhysicsModel = (perception: GeminiPerception): PhysicsComput
     flashTemperatureC: flashTemp,
     thermalConductivity: dbProps.Cond,
     dynamicLoadFactor: shockFactor,
-    fatigueLifeHours: 0, 
+    fatigueLifeHours: Number(l10Life.toFixed(0)), 
     failureProbability: 1/safetyFactor,
     rulHours: Number(rul.toFixed(1)),
     status,
