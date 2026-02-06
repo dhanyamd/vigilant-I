@@ -28,6 +28,9 @@ The first simulation shows the 3D view based on the analysis results.
 
 Use these prompts in the Digital Twin terminal to test different behaviors.
 
+I highly urge you to use **your own prompts** related to science, space, and physics for best results.
+
+
 ### Quick Tests
 
 #### Environmental Simulation
