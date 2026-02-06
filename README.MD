@@ -113,6 +113,10 @@ The application will launch at `http://localhost:5173`.
     *   *Example:* "Show me the stress fractures."
     *   *Example:* "Change material to Titanium."
 
+## Testing
+
+For testing, follow the guidelines in [demo.md](./demo.md). It includes sample inputs, step-by-step flow, and example Command Uplink prompts for the Digital Twin.
+
 ## License
 
 This project is open-source and available under the MIT License.

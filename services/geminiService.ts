@@ -75,7 +75,7 @@ const PERCEPTION_SCHEMA_TEXT = `
   "detectedContaminant": "REGOLITH_DUST" | "METAL_FRAGMENTS" | "OXIDATION" | "NONE",
   "lubricationState": "DRY" | "DEGRADED" | "NOMINAL",
   "estimatedSpeed": "LOW" | "MEDIUM" | "HIGH",
-  "reasoning": "string"
+  "reasoning": "string (Describe evidence. CRITICAL: IF A USER INQUIRY WAS DETECTED, PREPEND YOUR ANSWER WITH 'USER QUERY ANSWER: ')"
 }
 `;
 
@@ -256,7 +256,7 @@ export const analyzeMissionData = async (
   3. DO NOT output Flash Temperatures.
   4. DO NOT attempt to solve the Archard Equation.
   5. YOUR JOB is to provide the INPUT VARIABLES (Material, Severity, Chaos) for the deterministic physics kernel.
-  6. In 'reasoning', ONLY describe the visual/audio evidence. Do NOT predict failure time.
+  6. In 'reasoning', describe the visual/audio evidence. CRITICAL: If the user provided a "USER INQUIRY" in the prompt (e.g., asking about a specific feature), YOU MUST ANSWER IT directly in this field. Start your answer with "USER QUERY ANSWER:".
 
   TASK: Extract OBSERVABLE VARIABLES from imagery or audio. 
   YOU MUST DECIDE THE MATERIAL BASED ON VISUAL EVIDENCE (LUSTER, COLOR, TEXTURE).
@@ -304,7 +304,7 @@ export const analyzeMissionData = async (
   OUTPUT JSON: ${PERCEPTION_SCHEMA_TEXT}`;
 
   const userContent: any[] = [
-    { type: "text", text: `Extract physical variables. ${userPrompt || ""}` }
+    { type: "text", text: `Analyze mission data. ${userPrompt ? "USER INQUIRY: " + userPrompt : ""}` }
   ];
 
   // INPUT A: AUDIO OR SPECTROGRAM
